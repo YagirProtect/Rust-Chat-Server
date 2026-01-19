@@ -3,6 +3,7 @@ use tokio::{net::TcpListener, io::{AsyncReadExt, AsyncWriteExt}};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use crate::server_lib::c_hub::ServerClientsHub;
+use crate::shared_lib::c_command::Packet;
 use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand, ECommandType};
 
 mod shared_lib;
@@ -25,6 +26,8 @@ async fn main() -> std::io::Result<()> {
         let handle = tokio::spawn(async move {
             let mut buf = [0u8; 4096];
             let solver = CommandsSolver::default();
+            let mut user_id = -1;
+
             loop {
                 let n = match socket.read(&mut buf).await {
                     Ok(0) => {
@@ -41,8 +44,12 @@ async fn main() -> std::io::Result<()> {
 
                 let line: String = String::from_utf8_lossy(&buf[..n]).to_string();
 
-                let (command, args) = solver.pase_command_line(&line, ECommandType::ToServer);
+                println!("in >> {}", line);
 
+                let packet = Packet::load(line.as_str());
+
+                let command = packet.command;
+                let args = packet.args;
                 match command {
                     ECommand::CreateUser => {
                         let user_name = args[0].clone();
@@ -55,16 +62,40 @@ async fn main() -> std::io::Result<()> {
 
                             id = client.get_id();
                         }
+                        user_id = id as i32;
+                        let packet = CommandsSolver::create_command(ECommand::GetUserId, [id.to_string()]);
+                        send_message(&mut socket, packet).await;
 
-                        println!("User created {id}");
-                        let command = CommandsSolver::create_command(ECommand::GetUserId, id.to_string(), ECommandType::FromServer);
-                        send_message(&mut socket, command).await;
+                    }
+                    ECommand::GetRooms => {
+                        {
+                            let mut hub_guard = hub_for_task.lock().await;
+                            let table = hub_guard.get_rooms_table();
+                            let command = CommandsSolver::create_command(ECommand::GetRooms, [table]);
+                            send_message(&mut socket, command).await;
+                        }
+                    }
+                    ECommand::CreateRoom => {
 
+                        let room_name = args[0].clone();
+                        let room_size = args[1].clone().parse::<u8>().unwrap();
+                        {
+                            let mut hub_guard = hub_for_task.lock().await;
+                            hub_guard.create_room(room_name.clone(), room_size);
+
+                            if (hub_guard.join_room(room_name.clone(), user_id as u32)){
+                                send_message(&mut socket, Packet::new(ECommand::Info, vec![
+                                    format!("Joined to room {}", room_name),
+                                ])).await;
+                            }else{
+                                send_message(&mut socket, Packet::new(ECommand::Error, vec![
+                                    "Room not exists or full".to_string(),
+                                ])).await;
+                            }
+                        }
                     }
                     _ => {}
                 }
-
-
             }
             println!("disconnected: {addr}");
         });
@@ -72,8 +103,14 @@ async fn main() -> std::io::Result<()> {
     }
 }
 
-async fn send_message(socket:  &mut TcpStream, msg: String) {
-    if socket.write_all(msg.as_bytes()).await.is_err() {
+async fn send_message(socket:  &mut TcpStream, packet: Packet) {
+
+    let val = format!("{}\n", packet.to_string());
+
+
+    println!("out >> {}", val);
+    
+    if socket.write_all(val.as_bytes()).await.is_err() {
         println!("error writing to socket");
     }
 }

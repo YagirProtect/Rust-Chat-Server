@@ -1,28 +1,49 @@
-﻿use futures_util::SinkExt;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+﻿use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand, ECommandType};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
-use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand, ECommandType};
+use crate::shared_lib::c_command::Packet;
 
 pub struct Client {
+    server_id: u32,
     name: String,
     last_address: Option<String>,
-    writer: Option<OwnedWriteHalf>,
+
+    in_channel_rx: Option<mpsc::Receiver<Packet>>,
+    in_channel_tx: mpsc::Sender<Packet>,
+
+    out_channel_tx: mpsc::Sender<String>,
+    out_channel_rx: Option<mpsc::Receiver<String>>,
+
+    writer: Option<JoinHandle<()>>,
     reader: Option<JoinHandle<()>>,
 }
 
-impl Client {
+impl Client{
     pub fn new() -> Self {
+        let (out_tx, out_rx) = mpsc::channel::<String>(256);
+        let (in_tx, in_rx) = mpsc::channel::<Packet>(256);
+
         Self {
+            server_id: 0,
             name: "user".to_string(),
             writer: None,
             reader: None,
             last_address: None,
+
+            in_channel_rx: Some(in_rx),
+            in_channel_tx: in_tx,
+            out_channel_tx: out_tx,
+            out_channel_rx: Some(out_rx),
         }
     }
 
-
+    pub fn set_id(&mut self, id: u32) {
+        self.server_id = id;
+    }
     pub fn is_connected(&self) -> bool {
         self.writer.is_some()
     }
@@ -33,20 +54,35 @@ impl Client {
     pub async fn connect(&mut self, addr: &str) -> std::io::Result<()> {
         let stream = TcpStream::connect(addr).await?;
         let (rd, wr) = stream.into_split();
+        let (out_tx, out_rx) = mpsc::channel::<String>(256);
 
-        let handle = tokio::spawn(async move {
-            read_from_server(rd).await;
+
+        self.out_channel_tx = out_tx;
+        self.out_channel_rx = Some(out_rx);
+
+
+
+        let out_rx = self.out_channel_rx
+            .take()
+            .expect("out_channel_rx already taken (already connected?)");
+
+        let in_tx = self.in_channel_tx.clone();
+
+        let writer_task = tokio::spawn(async move {
+            writer_loop(wr, out_rx).await;
         });
 
+        let reader_task = tokio::spawn(async move {
+            reader_loop(rd, in_tx).await;
+        });
 
-        self.writer = Some(wr);
-        self.reader = Some(handle);
+        self.writer = Some(writer_task);
+        self.reader = Some(reader_task);
 
         println!("Connected to {addr}");
         
-        let command = CommandsSolver::create_command(ECommand::CreateUser, self.name.clone(), ECommandType::ToServer);
-        
-        self.send_message(command).await;
+        let packet = CommandsSolver::create_command(ECommand::CreateUser, [self.name.clone()]);
+        self.send_message(packet).await;
         
         Ok(())
     }
@@ -54,9 +90,11 @@ impl Client {
     pub async fn disconnect(&mut self) {
         self.reader.take();
         if let Some(mut w) = self.writer.take() {
-            let _ = w.shutdown().await;
+            w.abort();
         }
-
+        if let Some(mut r) = self.reader.take() {
+            r.abort();
+        }
 
         self.reader = None;
         self.writer = None;
@@ -66,42 +104,36 @@ impl Client {
         self.name = name.to_string();
     }
 
+    pub fn take_incoming_rx(&mut self) -> mpsc::Receiver<Packet> {
+        self.in_channel_rx.take().expect("incoming rx already taken")
+    }
 
-    pub async fn send_message(&mut self, message: String) {
+    pub async fn send_message(&mut self, packet: Packet) {
         if (self.is_connected()) {
-            let Some(writer) = self.writer.as_mut() else {
-                println!("No writer (not connected?)");
-                return;
-            };
-
-            if writer.write_all(message.as_bytes()).await.is_err() {
-                println!("Failed to send message");
-                return;
-            }
-
-            if writer.write_all(b"\n").await.is_err() {
-                println!("Failed to send newline");
-            }
+            self.out_channel_tx.send(format!("{}\n", packet.to_string())).await.expect("sender empty!!");
         }
     }
 }
 
-async fn read_from_server(mut rd: OwnedReadHalf) {
-    let mut buf = [0u8; 4096];
-
-    loop {
-        let n = match rd.read(&mut buf).await {
-            Ok(0) => {
-                println!("\n[server closed connection]");
-                break;
-            }
-            Ok(n) => n,
-            Err(e) => {
-                println!("\n[read error: {e}]");
-                break;
-            }
-        };
-
-        print!("{}", String::from_utf8_lossy(&buf[..n]));
+async fn writer_loop(mut wr: OwnedWriteHalf, mut out_rx: mpsc::Receiver<String>) {
+    while let Some(mut msg) = out_rx.recv().await {
+        if !msg.ends_with('\n') {
+            msg.push('\n');
+        }
+        if wr.write_all(msg.as_bytes()).await.is_err() {
+            break;
+        }
     }
+}
+
+async fn reader_loop(rd: OwnedReadHalf, in_tx: mpsc::Sender<Packet>) {
+    let mut lines = BufReader::new(rd).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        let ev = Packet::load(line.as_str());
+        if in_tx.send(ev).await.is_err() {
+            return;
+        }
+    }
+
+    let _ = in_tx.send(Packet::new(ECommand::None, Vec::<String>::new())).await;
 }

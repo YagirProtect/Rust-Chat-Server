@@ -1,4 +1,7 @@
 ﻿use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use crate::shared_lib::c_command::Packet;
+
 pub enum ECommandType{
     User,
     ToServer,
@@ -6,7 +9,7 @@ pub enum ECommandType{
 }
 
 
-#[derive(PartialEq, Default, Ord, PartialOrd, Eq, Hash, Copy, Clone, Debug)]
+#[derive(PartialEq, Default, Ord, PartialOrd, Eq, Hash, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum ECommand{
     #[default]
     None,
@@ -20,40 +23,41 @@ pub enum ECommand{
 
     CreateUser,
     GetRooms,
+    CreateRoom,
+    JoinRoom,
 
 
-
-    GetUserId
+    GetUserId,
+    Error,
+    Info,
 }
 
 impl ECommand {
 
-    pub fn get_user_pattern() -> HashMap<ECommand, Vec<String>>  {
+    pub fn user_available_commands() -> Vec<ECommand>{
+        vec![
+            ECommand::Connect,
+            ECommand::Disconnect,
+            ECommand::ChangeName,
+            ECommand::Help,
+            ECommand::Quit,
+            ECommand::GetRooms
+        ]
+    }
+
+    pub fn get_commands_strings() -> HashMap<ECommand, Vec<String>>  {
         let mut hash_map = HashMap::new();
 
         hash_map.insert(ECommand::None, vec![]);
-        hash_map.insert(ECommand::Connect, vec!["/connect".to_string(), "/c".to_string()]);
         hash_map.insert(ECommand::Disconnect, vec!["/disconnect".to_string()]);
         hash_map.insert(ECommand::ChangeName, vec!["/changename".to_string()]);
         hash_map.insert(ECommand::Help, vec!["/help".to_string()]);
-        hash_map.insert(ECommand::Quit, vec!["/quit".to_string(), "/q".to_string()]);
-
-
-        hash_map
-    }
-
-    pub fn get_to_server_pattern() -> HashMap<ECommand, Vec<String>>  {
-        let mut hash_map = HashMap::new();
-
         hash_map.insert(ECommand::CreateUser, vec!["/create_user".to_string()]);
-
-        hash_map
-    }
-    pub fn get_from_server_pattern() -> HashMap<ECommand, Vec<String>>  {
-        let mut hash_map = HashMap::new();
-
-        hash_map.insert(ECommand::GetUserId, vec!["/get_user_id".to_string()]);
         hash_map.insert(ECommand::GetRooms, vec!["/get_rooms".to_string()]);
+        hash_map.insert(ECommand::CreateRoom, vec!["/create_room".to_string()]);
+        hash_map.insert(ECommand::GetUserId, vec!["/get_user_id".to_string()]);
+        hash_map.insert(ECommand::Connect, vec!["/connect".to_string(), "/cnt".to_string()]);
+        hash_map.insert(ECommand::Quit, vec!["/quit".to_string(), "/q".to_string()]);
 
         hash_map
     }
@@ -63,68 +67,46 @@ impl ECommand {
 pub struct CommandsSolver{}
 
 impl CommandsSolver {
-    pub fn create_command(command: ECommand, args: String, user_type: ECommandType) -> String {
-        let commands = match user_type {
-            ECommandType::User => {
-                ECommand::get_user_pattern()
-            }
-            ECommandType::ToServer => {
-                ECommand::get_to_server_pattern()
-            }
-            ECommandType::FromServer => {
-                ECommand::get_from_server_pattern()
-            }
-        };
-
-
-        let val = &commands[&command];
-
-
-        return format!("{} {}", val[0], args);
+    pub fn create_command<I, S>(command: ECommand, args: I) -> Packet
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Packet::new(command, args.into_iter().map(Into::into).collect())
     }
 }
 
 impl CommandsSolver {
-    pub fn pase_command_line(&self, line: &String, user_type: ECommandType) -> (ECommand, Vec<String>) {
-
+    pub fn pase_command_line(&self, line: &String) -> Packet {
         let command = line.trim();
 
-        let commands = match user_type {
-            ECommandType::User => {
-                ECommand::get_user_pattern()
-            }
-            ECommandType::ToServer => {
-                ECommand::get_to_server_pattern()
-            }
-            ECommandType::FromServer => {
-                ECommand::get_from_server_pattern()
-            }
-        };
+        let commands = ECommand::get_commands_strings();
 
         let mut result = ECommand::None;
 
         for (i, (c, strs)) in commands.iter().enumerate() {
             for str in strs {
-                if (command.starts_with(str)){
+                if (command.starts_with(str)) {
                     result = *c;
                     break;
                 }
             }
-            if (result != ECommand::None){
+            if (result != ECommand::None) {
                 break;
             }
         }
 
         if (result != ECommand::None) {
             let mut parts_owned: Vec<String> = command
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
 
             parts_owned.remove(0);
 
-            return (result, parts_owned);
+            return Packet::new(result, parts_owned);
         }
-        (result, vec![])
+
+        Packet::new(ECommand::None, vec![])
     }
 }
