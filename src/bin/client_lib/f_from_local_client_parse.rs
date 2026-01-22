@@ -80,6 +80,7 @@ pub async fn parse_local_commands(client: &mut Client, line: String, solver: &mu
             print_cli(printer, "/create_room [name] [size]", ETextColor::White).await;
             print_cli(printer, "/join_room [name]", ETextColor::White).await;
             print_cli(printer, "/clear - flush console", ETextColor::White).await;
+            print_cli(printer, "/quit", ETextColor::White).await;
         }
         ECommand::GetRooms => {
             if !rooms_commands_valid(client, printer).await {
