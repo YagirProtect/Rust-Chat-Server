@@ -1,14 +1,14 @@
-﻿use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand, ECommandType};
+﻿use crate::shared_lib::c_command::Packet;
+use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
-use crate::shared_lib::c_command::Packet;
 
 pub struct Client {
     server_id: u32,
+    is_in_room: bool,
     name: String,
     last_address: Option<String>,
 
@@ -29,6 +29,7 @@ impl Client{
 
         Self {
             server_id: 0,
+            is_in_room: false,
             name: "user".to_string(),
             writer: None,
             reader: None,
@@ -41,14 +42,17 @@ impl Client{
         }
     }
 
+    pub fn is_in_room(&self) -> bool{
+        self.is_in_room
+    }
+    pub fn set_in_room(&mut self, state: bool){
+        self.is_in_room = state
+    }
     pub fn set_id(&mut self, id: u32) {
         self.server_id = id;
     }
     pub fn is_connected(&self) -> bool {
         self.writer.is_some()
-    }
-    pub fn get_last_address(&self) -> Option<String> {
-        self.last_address.clone()
     }
 
     pub async fn connect(&mut self, addr: &str) -> std::io::Result<()> {
@@ -57,6 +61,7 @@ impl Client{
         let (out_tx, out_rx) = mpsc::channel::<String>(256);
 
 
+        self.last_address = Some(addr.to_string());
         self.out_channel_tx = out_tx;
         self.out_channel_rx = Some(out_rx);
 
@@ -96,6 +101,7 @@ impl Client{
             r.abort();
         }
 
+        println!("Disconnected from {:?}", self.last_address);
         self.reader = None;
         self.writer = None;
     }
@@ -115,7 +121,7 @@ impl Client{
     }
 }
 
-async fn writer_loop(mut wr: OwnedWriteHalf, mut out_rx: mpsc::Receiver<String>) {
+pub async fn writer_loop(mut wr: OwnedWriteHalf, mut out_rx: mpsc::Receiver<String>) {
     while let Some(mut msg) = out_rx.recv().await {
         if !msg.ends_with('\n') {
             msg.push('\n');

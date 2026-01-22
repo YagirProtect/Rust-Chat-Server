@@ -30,6 +30,7 @@ pub enum ECommand{
     GetUserId,
     Error,
     Info,
+    UserMessage,
 }
 
 impl ECommand {
@@ -50,11 +51,12 @@ impl ECommand {
 
         hash_map.insert(ECommand::None, vec![]);
         hash_map.insert(ECommand::Disconnect, vec!["/disconnect".to_string()]);
-        hash_map.insert(ECommand::ChangeName, vec!["/changename".to_string()]);
+        hash_map.insert(ECommand::ChangeName, vec!["/change_name".to_string()]);
         hash_map.insert(ECommand::Help, vec!["/help".to_string()]);
         hash_map.insert(ECommand::CreateUser, vec!["/create_user".to_string()]);
         hash_map.insert(ECommand::GetRooms, vec!["/get_rooms".to_string()]);
         hash_map.insert(ECommand::CreateRoom, vec!["/create_room".to_string()]);
+        hash_map.insert(ECommand::JoinRoom, vec!["/join_room".to_string()]);
         hash_map.insert(ECommand::GetUserId, vec!["/get_user_id".to_string()]);
         hash_map.insert(ECommand::Connect, vec!["/connect".to_string(), "/cnt".to_string()]);
         hash_map.insert(ECommand::Quit, vec!["/quit".to_string(), "/q".to_string()]);
