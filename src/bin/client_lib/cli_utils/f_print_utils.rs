@@ -1,14 +1,11 @@
-﻿use std::time::Duration;
-use tokio::io;
-use tokio::io::AsyncWriteExt;
+﻿use crate::client_lib::classes::e_text_color::ETextColor;
+use crate::client_lib::cli_utils::f_rusty_line_input::Printer;
+use crossterm::cursor::MoveTo;
+use crossterm::execute;
+use crossterm::terminal::{Clear, ClearType};
+use std::io::{stdout, Write};
+use std::time::Duration;
 use tokio::time::sleep;
-use crate::client_lib::cli_lib::rusty_line_input::Printer;
-pub enum ETextColor{
-    White,
-    Yellow,
-    Red,
-    Green
-}
 
 
 pub async fn print_cli(printer: &mut Printer, msg: &str, color: ETextColor) {
@@ -27,6 +24,7 @@ pub async fn print_cli(printer: &mut Printer, msg: &str, color: ETextColor) {
 }
 
 pub fn clear_console() {
-    print!("\x1b[2J\x1b[H");
-    let _ = io::stdout().flush();
+    let mut out = stdout();
+    let _ = execute!(out, Clear(ClearType::All), MoveTo(0, 0));
+    let _ = out.flush();
 }

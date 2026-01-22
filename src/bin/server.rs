@@ -1,16 +1,15 @@
 ﻿use crate::server_lib::c_hub::ServerClientsHub;
+use crate::server_lib::c_server_client::{EClientState, USERS_IDS_SOLVER};
 use crate::shared_lib::c_command::Packet;
 use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand};
 use std::sync::Arc;
-use futures_util::future::err;
-use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::net::tcp::OwnedReadHalf;
 use tokio::sync::mpsc::Sender;
-use crate::client_lib::c_client::writer_loop;
-use crate::server_lib::c_server_client::{EClientState, ServerClient, USERS_IDS_SOLVER};
+use tokio::sync::{mpsc, Mutex};
+use tokio::{net::TcpListener};
+use crate::client_lib::classes::c_client::writer_loop;
+use crate::server_lib::f_server_logger::{log_input, log_output};
 
 mod shared_lib;
 mod server_lib;
@@ -23,12 +22,12 @@ async fn main() -> std::io::Result<()> {
 
 
     let listener = TcpListener::bind("127.0.0.1:3000").await?;
-    println!("listening on 127.0.0.1:3000");
+    println!("Listening on 127.0.0.1:3000");
 
     loop {
         let (mut socket, addr) = listener.accept().await?;
         let hub_for_task = Arc::clone(&hub);
-        println!("client: {addr}");
+        println!("Connected user by: {addr}");
 
 
 
@@ -59,8 +58,7 @@ async fn main() -> std::io::Result<()> {
                     break;
                 }
 
-                println!("in >> {}", line);
-
+                log_input(user_id, line.clone());
                 let packet = Packet::load(line.as_str());
 
                 let command = packet.command;
@@ -79,14 +77,14 @@ async fn main() -> std::io::Result<()> {
                             client.change_state(EClientState::Connected);
                         }
                         let packet = CommandsSolver::create_command(ECommand::GetUserId, [user_id.to_string()]);
-                        send_message(out_tx.clone(), packet).await;
+                        send_message(out_tx.clone(), packet, user_id).await;
                     }
                     ECommand::GetRooms => {
                         {
                             let hub_guard = hub_for_task.lock().await;
                             let table = hub_guard.get_rooms_table();
                             let command = CommandsSolver::create_command(ECommand::GetRooms, [table]);
-                            send_message(out_tx.clone(), command).await;
+                            send_message(out_tx.clone(), command, user_id).await;
                         }
                     }
                     ECommand::CreateRoom => {
@@ -102,7 +100,13 @@ async fn main() -> std::io::Result<()> {
                             if (!find_room) {
                                 hub_guard.create_room(room_name.clone(), room_size);
                             }else{
-                                send_message(out_tx.clone(), Packet::new(ECommand::Error, vec!["Room with same name is exists".to_string()])).await;
+                                send_message(
+                                    out_tx.clone(),
+                                             Packet::new(
+                                                 ECommand::Error,
+                                                 vec!["Room with same name is exists".to_string()]
+                                             ),
+                                user_id).await;
                                 continue;
                             }
                         }
@@ -118,7 +122,6 @@ async fn main() -> std::io::Result<()> {
                         {
                             let sender = hub_guard.find_user_mut(user_id).unwrap().get_name();
                             let room = hub_guard.get_user_room(user_id);
-                            println!("user message: {}", user_id);
 
                             match room {
                                 None => {}
@@ -129,9 +132,6 @@ async fn main() -> std::io::Result<()> {
                                             Some(user) => user,
                                             _ => { continue; }
                                         };
-
-                                        println!("{:?}", user.get_id());
-
                                         user.send_message_to(args[0].clone(), sender.clone()).await;
                                     }
                                 }
@@ -157,8 +157,8 @@ async fn main() -> std::io::Result<()> {
                         }
 
 
-                        send_message(out_tx.clone(), Packet::new(ECommand::Info, vec!["Disconnected from room".to_string()])).await;
-                        send_message(out_tx.clone(), Packet::new(ECommand::Disconnect, vec![])).await;
+                        send_message(out_tx.clone(), Packet::new(ECommand::Info, vec!["Disconnected from room".to_string()]), user_id).await;
+                        send_message(out_tx.clone(), Packet::new(ECommand::Disconnect, vec![]), user_id).await;
                     }
                     _ => {}
                 }
@@ -169,7 +169,7 @@ async fn main() -> std::io::Result<()> {
                 hub_guard.disconnect_user(user_id);
                 hub_guard.remove_user(user_id);
             }
-            println!("disconnected: {addr}");
+            println!("Disconnected: {addr} {user_id}");
         });
     }
 }
@@ -182,25 +182,25 @@ async fn join_room(out_tx: Sender<String>, hub_for_task: &Arc<Mutex<ServerClient
         if (hub_guard.join_room(room_name.clone(), user_id)) {
             send_message(out_tx.clone(), Packet::new(ECommand::Info, vec![
                 format!("Joined to room {}", room_name),
-            ])).await;
-            send_message(out_tx.clone(), Packet::new(ECommand::JoinRoom, vec![])).await;
+            ]), user_id).await;
+            send_message(out_tx.clone(), Packet::new(ECommand::JoinRoom, vec![]), user_id).await;
 
         } else {
             send_message(out_tx, Packet::new(ECommand::Error, vec![
                 "Room not exists or full".to_string(),
-            ])).await;
+            ]), user_id).await;
         }
     }
 }
 
-async fn send_message(out_tx: Sender<String>, packet: Packet) {
+async fn send_message(out_tx: Sender<String>, packet: Packet, user_id: u32) {
     let val = format!("{}\n", packet.to_string());
 
 
-    println!("out >> {}", val);
+    log_output(user_id, &packet);
 
     if out_tx.send(val).await.is_err() {
-        println!("error writing to socket");
+        println!("Error writing to socket to {}", user_id);
     }
 }
 

@@ -17,6 +17,7 @@ pub enum ECommand{
     Disconnect,
     ChangeName,
     Help,
+    ClearCLI,
     Quit,
 
 
@@ -25,7 +26,6 @@ pub enum ECommand{
     GetRooms,
     CreateRoom,
     JoinRoom,
-
 
     GetUserId,
     Error,
@@ -59,6 +59,7 @@ impl ECommand {
         hash_map.insert(ECommand::JoinRoom, vec!["/join_room".to_string()]);
         hash_map.insert(ECommand::GetUserId, vec!["/get_user_id".to_string()]);
         hash_map.insert(ECommand::Connect, vec!["/connect".to_string(), "/cnt".to_string()]);
+        hash_map.insert(ECommand::ClearCLI, vec!["/clear".to_string(), "/cls".to_string()]);
         hash_map.insert(ECommand::Quit, vec!["/quit".to_string(), "/q".to_string()]);
 
         hash_map

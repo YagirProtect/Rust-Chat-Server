@@ -1,6 +1,7 @@
-﻿use crate::client_lib::c_client::Client;
-use crate::client_lib::cli_lib::print_utils::{print_cli, ETextColor};
-use crate::client_lib::cli_lib::rusty_line_input::Printer;
+﻿use crate::client_lib::classes::c_client::Client;
+use crate::client_lib::classes::e_text_color::ETextColor;
+use crate::client_lib::cli_utils::f_print_utils::{print_cli};
+use crate::client_lib::cli_utils::f_rusty_line_input::Printer;
 use crate::shared_lib::c_command::Packet;
 use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand};
 
@@ -17,7 +18,7 @@ pub async fn parse_from_server_commands(client: &mut Client, packet: Packet, sol
         ECommand::GetRooms =>{
             print_cli(printer, "Available rooms list: ", ETextColor::White).await;
             print_cli(printer, packet.args[0].as_str(), ETextColor::White).await;
-            if (!client.is_in_room()){
+            if !client.is_in_room() {
                 print_cli(printer, "/join_room [name] - to join room", ETextColor::White).await;
                 print_cli(printer, "/create_room [name] [size] - to create own room", ETextColor::White).await;
             }

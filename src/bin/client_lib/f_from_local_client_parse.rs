@@ -1,10 +1,10 @@
-﻿use crate::client_lib::c_client::Client;
-use crate::client_lib::cli_lib::print_utils::ETextColor::{White, Yellow};
-use crate::client_lib::cli_lib::print_utils::{print_cli, ETextColor};
-use crate::client_lib::cli_lib::rusty_line_input::Printer;
+﻿use crate::client_lib::classes::c_client::Client;
+use crate::client_lib::classes::e_text_color::ETextColor;
+use crate::client_lib::cli_utils::f_print_utils::{clear_console, print_cli};
+use crate::client_lib::cli_utils::f_rusty_line_input::Printer;
 use crate::shared_lib::c_command::Packet;
 use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand};
-use crate::shared_lib::utils::get_time_stamp_str;
+use crate::shared_lib::f_utils::get_time_stamp_str;
 
 pub async fn parse_local_commands(client: &mut Client, line: String, solver: &mut CommandsSolver, printer: &mut Printer) -> ECommand {
     let packet = solver.pase_command_line(&line);
@@ -17,13 +17,13 @@ pub async fn parse_local_commands(client: &mut Client, line: String, solver: &mu
                 if client.is_in_room() {
                     client.send_message(Packet::new(ECommand::UserMessage, vec![line.clone()])).await;
                     let time_stamp = get_time_stamp_str();
-                    print_cli(printer, format!("{} You: {}", time_stamp, line.clone()).as_str(), Yellow).await;
+                    print_cli(printer, format!("{} You: {}", time_stamp, line.clone()).as_str(), ETextColor::Yellow).await;
+                    return packet.command;
                 }
-            }else{
-                print_cli(printer, "Command not found use /help", ETextColor::Red).await;
             }
-        }
 
+            print_cli(printer, "Command not found use /help", ETextColor::Red).await;
+        }
         ECommand::Connect => {
             if client.is_in_room() {
                 print_cli(printer, "Disconnect from room first.", ETextColor::Red).await;
@@ -71,7 +71,15 @@ pub async fn parse_local_commands(client: &mut Client, line: String, solver: &mu
             print_cli(printer, format!("Your name now is {}", args[0]).as_str(), ETextColor::Green).await;
         }
         ECommand::Help => {
-
+            print_cli(printer, "Help:", ETextColor::Yellow).await;
+            print_cli(printer, "/connect [empty/IP] - connecting to server by IP", ETextColor::White).await;
+            print_cli(printer, "/disconnect - disconnecting from server", ETextColor::White).await;
+            print_cli(printer, "/change_name [name] - change user name", ETextColor::White).await;
+            print_cli(printer, "/help", ETextColor::White).await;
+            print_cli(printer, "/get_rooms - get available chat rooms", ETextColor::White).await;
+            print_cli(printer, "/create_room [name] [size]", ETextColor::White).await;
+            print_cli(printer, "/join_room [name]", ETextColor::White).await;
+            print_cli(printer, "/clear - flush console", ETextColor::White).await;
         }
         ECommand::GetRooms => {
             if !rooms_commands_valid(client, printer).await {
@@ -122,10 +130,11 @@ pub async fn parse_local_commands(client: &mut Client, line: String, solver: &mu
                 client.send_message(Packet::new(ECommand::JoinRoom, vec![args[0].to_string()])).await;
             }
         }
+        ECommand::ClearCLI =>{
+            clear_console();
+        }
         _ => {}
     }
-
-
     packet.command
 }
 
@@ -145,7 +154,9 @@ async fn rooms_commands_valid(client: &mut Client, printer: &mut Printer) -> boo
 async fn connect_to_api(client: &mut Client, printer: &mut Printer, api: &str) {
     let val = client.connect(api).await;
     match val {
-        Ok(_) => {}
+        Ok(_) => {
+            print_cli(printer, format!("Connected to: {}", api).as_str(), ETextColor::Yellow).await;
+        }
         Err(_) => {
             print_cli(printer, format!("Connection failed: {}", api).as_str(), ETextColor::Red).await;
         }

@@ -1,16 +1,19 @@
 ﻿use crate::shared_lib::c_command::Packet;
 use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use crate::client_lib::classes::c_config::Config;
 
 pub struct Client {
     server_id: u32,
     is_in_room: bool,
     name: String,
     last_address: Option<String>,
+
+    config: Config,
 
     in_channel_rx: Option<mpsc::Receiver<Packet>>,
     in_channel_tx: mpsc::Sender<Packet>,
@@ -21,16 +24,15 @@ pub struct Client {
     writer: Option<JoinHandle<()>>,
     reader: Option<JoinHandle<()>>,
 }
-
 impl Client{
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         let (out_tx, out_rx) = mpsc::channel::<String>(256);
         let (in_tx, in_rx) = mpsc::channel::<Packet>(256);
 
         Self {
             server_id: 0,
             is_in_room: false,
-            name: "user".to_string(),
+            name: config.user_name(),
             writer: None,
             reader: None,
             last_address: None,
@@ -39,9 +41,13 @@ impl Client{
             in_channel_tx: in_tx,
             out_channel_tx: out_tx,
             out_channel_rx: Some(out_rx),
+
+            config: config,
         }
     }
-
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
     pub fn is_in_room(&self) -> bool{
         self.is_in_room
     }
@@ -84,7 +90,7 @@ impl Client{
         self.writer = Some(writer_task);
         self.reader = Some(reader_task);
 
-        println!("Connected to {addr}");
+        // println!("Connected to {addr}");
         
         let packet = CommandsSolver::create_command(ECommand::CreateUser, [self.name.clone()]);
         self.send_message(packet).await;
@@ -101,13 +107,16 @@ impl Client{
             r.abort();
         }
 
-        println!("Disconnected from {:?}", self.last_address);
+        println!("Disconnected from {:?}", self.last_address.clone().unwrap().as_str());
         self.reader = None;
         self.writer = None;
     }
 
     pub fn change_name(&mut self, name: &str) {
+        self.config.set_user_name(name.to_string());
         self.name = name.to_string();
+
+        self.config.write_file();
     }
 
     pub fn take_incoming_rx(&mut self) -> mpsc::Receiver<Packet> {

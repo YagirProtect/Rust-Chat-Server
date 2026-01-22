@@ -11,3 +11,4 @@ serde_json = "1.0.149"
 tokio = { version =  "1.49.0", features = ["full"] }
 tokio-tungstenite = "0.28.0"
 rustyline = { version = "17", features = ["with-file-history"] }
+crossterm = "0.29.0"

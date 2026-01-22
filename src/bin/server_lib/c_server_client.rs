@@ -1,12 +1,10 @@
 ﻿use crate::server_lib::c_server_client::EClientState::Connected;
-use std::sync::atomic::AtomicU32;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
-use tokio::task::JoinHandle;
+use crate::server_lib::f_server_logger::log_output;
 use crate::shared_lib::c_command::Packet;
 use crate::shared_lib::c_commands_solver::ECommand;
-use crate::shared_lib::c_commands_solver::ECommand::UserMessage;
-use crate::shared_lib::utils::get_time_stamp_str;
+use crate::shared_lib::f_utils::get_time_stamp_str;
+use std::sync::atomic::AtomicU32;
+use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub enum EClientState{
@@ -49,6 +47,8 @@ impl ServerClient {
 
         if (self.sender.send(packet.to_string()).await.is_err()){
             println!("Send message to: {} error", self.user_id);
+        }else{
+            log_output(self.user_id, &packet)
         }
     }
 
