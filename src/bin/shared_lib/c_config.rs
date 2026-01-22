@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct Config{
     user_name: String,
+    address: String,
 }
 
 
@@ -15,6 +16,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             user_name: "User".to_string(),
+            address: "127.0.0.1:3000".to_string(),
         }
     }
 }
@@ -26,6 +28,10 @@ impl Config {
 
     pub fn set_user_name(&mut self, name: String) {
         self.user_name = name;
+    }
+    
+    pub fn get_address(&self) -> String {
+        self.address.clone()
     }
 }
 

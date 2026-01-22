@@ -9,6 +9,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, Mutex};
 use tokio::{net::TcpListener};
 use crate::client_lib::classes::c_client::writer_loop;
+use shared_lib::c_config::Config;
 use crate::server_lib::f_server_logger::{log_input, log_output};
 
 mod shared_lib;
@@ -20,9 +21,12 @@ async fn main() -> std::io::Result<()> {
 
     let hub = Arc::new(Mutex::new(ServerClientsHub::default()));
 
+    let mut config = Config::default();
+    config.read_file();
 
-    let listener = TcpListener::bind("127.0.0.1:3000").await?;
-    println!("Listening on 127.0.0.1:3000");
+
+    let listener = TcpListener::bind(config.get_address()).await?;
+    println!("Listening on {}", config.get_address());
 
     loop {
         let (mut socket, addr) = listener.accept().await?;

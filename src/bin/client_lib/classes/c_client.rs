@@ -5,14 +5,14 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use crate::client_lib::classes::c_config::Config;
+use crate::shared_lib::c_config::Config;
 
 pub struct Client {
     server_id: u32,
     is_in_room: bool,
     name: String,
     last_address: Option<String>,
-
+    default_address: String,
     config: Config,
 
     in_channel_rx: Option<mpsc::Receiver<Packet>>,
@@ -24,6 +24,9 @@ pub struct Client {
     writer: Option<JoinHandle<()>>,
     reader: Option<JoinHandle<()>>,
 }
+
+
+
 impl Client{
     pub fn new(config: Config) -> Self {
         let (out_tx, out_rx) = mpsc::channel::<String>(256);
@@ -41,7 +44,7 @@ impl Client{
             in_channel_tx: in_tx,
             out_channel_tx: out_tx,
             out_channel_rx: Some(out_rx),
-
+            default_address: config.get_address(),
             config: config,
         }
     }
@@ -62,6 +65,7 @@ impl Client{
     }
 
     pub async fn connect(&mut self, addr: &str) -> std::io::Result<()> {
+
         let stream = TcpStream::connect(addr).await?;
         let (rd, wr) = stream.into_split();
         let (out_tx, out_rx) = mpsc::channel::<String>(256);
@@ -89,8 +93,6 @@ impl Client{
 
         self.writer = Some(writer_task);
         self.reader = Some(reader_task);
-
-        // println!("Connected to {addr}");
         
         let packet = CommandsSolver::create_command(ECommand::CreateUser, [self.name.clone()]);
         self.send_message(packet).await;
@@ -127,6 +129,10 @@ impl Client{
         if (self.is_connected()) {
             self.out_channel_tx.send(format!("{}\n", packet.to_string())).await.expect("sender empty!!");
         }
+    }
+
+    pub fn get_default_address(&self) -> String {
+        self.default_address.clone()
     }
 }
 

@@ -37,7 +37,7 @@ pub async fn parse_local_commands(client: &mut Client, line: String, solver: &mu
             if args.len() > 0 {
                 connect_to_api(client, printer, args[0].as_str()).await;
             } else {
-                connect_to_api(client, printer, "127.0.0.1:3000").await;
+                connect_to_api(client, printer, client.get_default_address().as_str()).await;
             }
         }
         ECommand::Disconnect => {

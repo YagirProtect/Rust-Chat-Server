@@ -9,7 +9,7 @@ use crate::shared_lib::c_commands_solver::{CommandsSolver, ECommand};
 use client_lib::f_from_local_client_parse::parse_local_commands;
 use tokio::io;
 use tokio::sync::mpsc;
-use crate::client_lib::classes::c_config::Config;
+use shared_lib::c_config::Config;
 use crate::client_lib::classes::e_text_color::ETextColor;
 use crate::client_lib::cli_utils::f_rusty_line_input::Printer;
 
