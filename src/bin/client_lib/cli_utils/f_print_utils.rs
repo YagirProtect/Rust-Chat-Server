@@ -5,6 +5,7 @@ use crossterm::execute;
 use crossterm::terminal::{Clear, ClearType};
 use std::io::{stdout, Write};
 use std::time::Duration;
+use crossterm::style::Stylize;
 use tokio::time::sleep;
 
 
@@ -13,9 +14,9 @@ pub async fn print_cli(printer: &mut Printer, msg: &str, color: ETextColor) {
 
     let message = match color{
         ETextColor::White => msg.to_string(),
-        ETextColor::Yellow => format!("\x1b[33m{} {}\x1b[0m", "", msg),
-        ETextColor::Red => format!("\x1b[31m{} {}\x1b[0m", "[Error]", msg),
-        ETextColor::Green => format!("\x1b[32m{} {}\x1b[0m", "[Info]", msg),
+        ETextColor::Yellow => msg.yellow().to_string(),
+        ETextColor::Red => msg.red().to_string(),
+        ETextColor::Green => msg.green().to_string(),
 
     };
 
